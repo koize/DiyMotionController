@@ -1,7 +1,7 @@
 {
-    "sketch": "motion-controller.ino",
-    "board": "espressif:esp32:esp32",
-    "configuration": "PSRAM=disabled,PartitionScheme=default,CPUFreq=240,FlashMode=qio,FlashFreq=80,FlashSize=4M,UploadSpeed=921600,DebugLevel=none",
+    "sketch": "DiyMotionController.ino",
+    "board": "esp32:esp32:ttgo-lora32",
+    "configuration": "Revision=TTGO_LoRa32_v21new,FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=none",
     "output": "./../build",
-    "port": "COM8"
+    "port": "COM6"
 }
