@@ -27,8 +27,8 @@
 #define I2C2_SDA_PIN 0
 #define I2C2_SCL_PIN 23
  
-TwoWire I2C1 = TwoWire(0); //OLED bus
-TwoWire I2C2 = TwoWire(1); //Gyro bus
+//TwoWire I2C1 = TwoWire(0); //OLED bus
+//TwoWire I2C2 = TwoWire(1); //Gyro bus
 
 #define PIN_BUTTON_THUMB 4
 #define PIN_GPS_RX 2
@@ -119,7 +119,7 @@ TaskHandle_t i2cResourceTask;
 TaskHandle_t ioTask;
 TaskHandle_t oledTask;
 
-SSD1306Wire display(0x3c, &I2C1);
+SSD1306Wire display(0x3c, &Wire);
 OledDisplay oledDisplay(&display);
 
 QmuTactile buttonTrigger(PIN_BUTTON_TRIGGER);
@@ -191,11 +191,11 @@ void setup()
 #ifdef TRAINER_MODE_SBUS
     sbusSerial.begin(100000, SERIAL_8E2, SERIAL1_RX, SERIAL1_TX, false, 100UL);
 #endif
+    Serial.println("boo");
 
-    I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
-    I2C2.begin(I2C2_SDA_PIN, I2C2_SCL_PIN, 100000);
-
-    if (!mpu.begin(0x68, &I2C2, 0))
+    //I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
+    //I2C2.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 100000);
+    if (!mpu.begin(0x68))
     {
         Serial.println("MPU6050 init fail");
         while (1)
