@@ -117,14 +117,20 @@ void IRAM_ATTR onPpmTimer() {
 
 TaskHandle_t i2cResourceTask;
 TaskHandle_t ioTask;
-TaskHandle_t oledTask;
+//TaskHandle_t oledTask;
 
-SSD1306Wire display(0x3c, &Wire);
-OledDisplay oledDisplay(&display);
+//SSD1306Wire display(0x3c, &Wire);
+//OledDisplay oledDisplay(&display);
 
 QmuTactile buttonTrigger(PIN_BUTTON_TRIGGER);
 QmuTactile buttonThumb(PIN_BUTTON_THUMB);
 QmuTactile buttonJoystick(PIN_THUMB_JOYSTICK_SW);
+
+long accelX, accelY, accelZ;
+float gForceX, gForceY, gForceZ;
+
+long gyroX, gyroY, gyroZ;
+float rotX, rotY, rotZ;
 
 void sensorCalibrate(struct gyroCalibration_t *cal, float sampleX, float sampleY, float sampleZ, const float dev)
 {
@@ -176,6 +182,60 @@ void sensorCalibrate(struct gyroCalibration_t *cal, float sampleX, float sampleY
     }
 }
 
+void setupMPU(){
+  Wire.beginTransmission(0b1101000); //This is the I2C address of the MPU (b1101000/b1101001 for AC0 low/high datasheet sec. 9.2)
+  Wire.write(0x6B); //Accessing the register 6B - Power Management (Sec. 4.28)
+  Wire.write(0b00000000); //Setting SLEEP register to 0. (Required; see Note on p. 9)
+  Wire.endTransmission();  
+  Wire.beginTransmission(0b1101000); //I2C address of the MPU
+  Wire.write(0x1B); //Accessing the register 1B - Gyroscope Configuration (Sec. 4.4) 
+  Wire.write(0x00000000); //Setting the gyro to full scale +/- 250deg./s 
+  Wire.endTransmission(); 
+  Wire.beginTransmission(0b1101000); //I2C address of the MPU
+  Wire.write(0x1C); //Accessing the register 1C - Acccelerometer Configuration (Sec. 4.5) 
+  Wire.write(0b00000000); //Setting the accel to +/- 2g
+  Wire.endTransmission(); 
+}
+
+void recordAccelRegisters() {
+  Wire.beginTransmission(0b1101000); //I2C address of the MPU
+  Wire.write(0x3B); //Starting register for Accel Readings
+  Wire.endTransmission();
+  Wire.requestFrom(0b1101000,6); //Request Accel Registers (3B - 40)
+  //while(Wire.available() < 6);
+  accelX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
+  accelY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
+  accelZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
+  Serial.println(accelX);
+  processAccelData();
+}
+
+void processAccelData(){
+  gForceX = accelX / 16384.0;
+  gForceY = accelY / 16384.0; 
+  gForceZ = accelZ / 16384.0;
+}
+
+void recordGyroRegisters() {
+  Wire.beginTransmission(0b1101000); //I2C address of the MPU
+  Wire.write(0x43); //Starting register for Gyro Readings
+  Wire.endTransmission();
+  Wire.requestFrom(0b1101000,6); //Request Gyro Registers (43 - 48)
+  //while(Wire.available() < 6);
+  gyroX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
+  gyroY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
+  gyroZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
+  Serial.println(gyroX);
+  processGyroData();
+}
+
+void processGyroData() {
+  rotX = gyroX / 131.0;
+  rotY = gyroY / 131.0; 
+  rotZ = gyroZ / 131.0;
+}
+
+
 void setup()
 {
     Serial.begin(115200);
@@ -194,7 +254,8 @@ void setup()
     Serial.println("boo");
 
     //I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
-    //I2C2.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 100000);
+    /*
+    I2C2.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 100000);
     if (!mpu.begin(0x68))
     {
         Serial.println("MPU6050 init fail");
@@ -208,17 +269,19 @@ void setup()
     mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
     mpu.setGyroRange(MPU6050_RANGE_250_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-
+    */
     delay(50);
 
-    oledDisplay.init();
-    oledDisplay.setPage(OLED_PAGE_BEACON_STATUS);
-
+    //oledDisplay.init();
+    //oledDisplay.setPage(OLED_PAGE_BEACON_STATUS);
+    Wire.begin();
+    setupMPU();
     delay(50);
 
     buttonTrigger.start();
     buttonThumb.start();
     buttonJoystick.start();
+    Serial.println("boo3");
 
     xTaskCreatePinnedToCore(
         i2cResourceTaskHandler, /* Function to implement the task */
@@ -237,15 +300,15 @@ void setup()
         0,             /* Priority of the task */
         &ioTask,       /* Task handle. */
         0);
-
+    /*
     xTaskCreatePinnedToCore(
-        oledTaskHandler, /* Function to implement the task */
-        "oledTask",  /* Name of the task */
-        10000,         /* Stack size in words */
-        NULL,          /* Task input parameter */
-        0,             /* Priority of the task */
-        &oledTask,       /* Task handle. */
-        0);
+        oledTaskHandler, 
+        "oledTask",  
+        10000,         
+        NULL,          
+        0,            
+        &oledTask,       
+        0);*/
 }
 
 //I do not get function pointers to object methods, no way...
@@ -295,12 +358,12 @@ void outputSubtask()
     // Reset Z on each trigger press
     if (buttonTrigger.checkFlag(TACTILE_FLAG_EDGE_PRESSED))
     {
-        imu.angle.z = 0;
+        rotZ = 0;
     }
 
     // Z updates from gyro happens only when THUMB button is pressed
     if (!buttonThumb.checkFlag(TACTILE_FLAG_PRESSED)) {
-        imu.angle.z = 0;
+        rotZ = 0;
     }
 
     for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++)
@@ -314,8 +377,8 @@ void outputSubtask()
     }
 
     if (
-        isnan(imu.angle.x) ||
-        isnan(imu.angle.y) 
+        isnan(rotX) ||
+        isnan(rotY) 
     ) {
         //TODO Data is broken, time to react or just do nothing
         device.setActionEnabled(false);
@@ -323,9 +386,9 @@ void outputSubtask()
 
     if (device.getActionEnabled()) 
     {
-        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(imu.angle.x);
-        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(imu.angle.y);
-        output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(imu.angle.z) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
+        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotX);
+        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotY);
+        output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
         output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE + joystickToRcChannel(thumbJoystick.position[AXIS_Y]);
 
         for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
@@ -334,23 +397,23 @@ void outputSubtask()
 
     }
 }
-
+/*
 void oledTaskHandler(void *pvParameters)
 {
     portTickType xLastWakeTime;
     const portTickType xPeriod = 200 / portTICK_PERIOD_MS;
     xLastWakeTime = xTaskGetTickCount();
 
-    /*
+    
      * MPU6050 and OLED share the same I2C bus
      * To simplify the implementation and do not have to resolve resource conflicts,
      * both tasks are called in one thread pinned to the same core
-     */
+     
     for (;;)
     {
-        /*
+        
          * Process OLED display
-         */
+         
         oledDisplay.loop();
 
         // Put task to sleep
@@ -358,13 +421,14 @@ void oledTaskHandler(void *pvParameters)
     }
 
     vTaskDelete(NULL);
-}
+}*/
 
 void ioTaskHandler(void *pvParameters)
 {
     portTickType xLastWakeTime;
     const portTickType xPeriod = OUTPUT_UPDATE_TASK_MS / portTICK_PERIOD_MS;
     xLastWakeTime = xTaskGetTickCount();
+    Serial.println("boo4");
 
     for (;;)
     {
@@ -377,7 +441,7 @@ void ioTaskHandler(void *pvParameters)
          */
         processJoystickAxis(AXIS_X, PIN_THUMB_JOYSTICK_X);
         processJoystickAxis(AXIS_Y, PIN_THUMB_JOYSTICK_Y);
-        sensorCalibrate(&thumbJoystick.calibration, thumbJoystick.raw[AXIS_X], thumbJoystick.raw[AXIS_Y], 0, 3.0f);
+        //sensorCalibrate(&thumbJoystick.calibration, thumbJoystick.raw[AXIS_X], thumbJoystick.raw[AXIS_Y], 0, 3.0f);
 
         outputSubtask();
 
@@ -393,10 +457,16 @@ void imuSubtask()
     static uint32_t prevMicros = 0;
     float dT = (micros() - prevMicros) * 0.000001f;
     prevMicros = micros();
+    Serial.println("boo5");
 
     if (prevMicros > 0)
     {
-
+        recordAccelRegisters();
+        recordGyroRegisters();
+        imu.angle.x = rotX;
+        imu.angle.y = rotY;
+        imu.angle.z = rotZ;
+        /*
         mpu.getEvent(&acc, &gyro, &temp);
 
         imu.accAngle.x = (atan(acc.acceleration.y / sqrt(pow(acc.acceleration.x, 2) + pow(acc.acceleration.z, 2))) * 180 / PI);
@@ -417,7 +487,9 @@ void imuSubtask()
         /*
          * Calibration Routine
          */
+        /*
         sensorCalibrate(&imu.gyroCalibration, imu.gyro.x, imu.gyro.y, imu.gyro.z, 3.0f);
+        */
     }
 }
 
@@ -437,6 +509,7 @@ void i2cResourceTaskHandler(void *pvParameters)
         /*
         * Read gyro
         */
+        Serial.println("booGYRO");
         imuSubtask();
 
         /*
@@ -480,8 +553,8 @@ void loop()
 
     if (millis() > nextSerialTaskMs)
     {
-        // Serial.println(String(imu.angle.z, 2) + " " + String(imu.gyro.z, 2));
-        // Serial.println(String(imu.angle.x, 1) + " " + String(imu.angle.y, 1) + " " + String(imu.gyro.z, 1));
+         //Serial.println(String(rotZ, 2));
+         //Serial.println(String(rotX, 1) + " " + String(rotY, 1));
         // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
         // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
         // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
