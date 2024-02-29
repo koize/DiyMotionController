@@ -206,7 +206,6 @@ void recordAccelRegisters() {
   accelX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
   accelY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
   accelZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  Serial.println(accelX);
   processAccelData();
 }
 
@@ -225,7 +224,6 @@ void recordGyroRegisters() {
   gyroX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
   gyroY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
   gyroZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  Serial.println(gyroX);
   processGyroData();
 }
 
@@ -251,7 +249,6 @@ void setup()
 #ifdef TRAINER_MODE_SBUS
     sbusSerial.begin(100000, SERIAL_8E2, SERIAL1_RX, SERIAL1_TX, false, 100UL);
 #endif
-    Serial.println("boo");
 
     //I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
     /*
@@ -281,7 +278,6 @@ void setup()
     buttonTrigger.start();
     buttonThumb.start();
     buttonJoystick.start();
-    Serial.println("boo3");
 
     xTaskCreatePinnedToCore(
         i2cResourceTaskHandler, /* Function to implement the task */
@@ -363,14 +359,14 @@ void outputSubtask()
 
     // Z updates from gyro happens only when THUMB button is pressed
     if (!buttonThumb.checkFlag(TACTILE_FLAG_PRESSED)) {
-        rotZ = 0;
+        //rotZ = 0;
     }
 
     for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++)
     {
         output.channels[i] = DEFAULT_CHANNEL_VALUE;
     }
-
+    /*
     if (buttonTrigger.getState() == TACTILE_STATE_LONG_PRESS) 
     {
         device.setActionEnabled(!device.getActionEnabled());
@@ -382,14 +378,18 @@ void outputSubtask()
     ) {
         //TODO Data is broken, time to react or just do nothing
         device.setActionEnabled(false);
-    }
+    }*/
 
+    device.setActionEnabled(true);
     if (device.getActionEnabled()) 
     {
         output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotX);
         output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotY);
         output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
         output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE + joystickToRcChannel(thumbJoystick.position[AXIS_Y]);
+        Serial.println("sbus roll: " + String(output.channels[ROLL]));
+        Serial.println("sbus pitch: " + String(output.channels[PITCH]));
+        Serial.println("sbus yaw: " + String(output.channels[YAW]));
 
         for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
             output.channels[i] = constrain(output.channels[i], 1000, 2000);
@@ -428,7 +428,6 @@ void ioTaskHandler(void *pvParameters)
     portTickType xLastWakeTime;
     const portTickType xPeriod = OUTPUT_UPDATE_TASK_MS / portTICK_PERIOD_MS;
     xLastWakeTime = xTaskGetTickCount();
-    Serial.println("boo4");
 
     for (;;)
     {
@@ -457,7 +456,6 @@ void imuSubtask()
     static uint32_t prevMicros = 0;
     float dT = (micros() - prevMicros) * 0.000001f;
     prevMicros = micros();
-    Serial.println("boo5");
 
     if (prevMicros > 0)
     {
@@ -509,7 +507,6 @@ void i2cResourceTaskHandler(void *pvParameters)
         /*
         * Read gyro
         */
-        Serial.println("booGYRO");
         imuSubtask();
 
         /*
@@ -546,24 +543,24 @@ void loop()
     {
         sbusPreparePacket(sbusPacket, false, false, getRcChannel_wrapper);
         sbusSerial.write(sbusPacket, SBUS_PACKET_LENGTH);
-
+        Serial.println("booo");
         nextSbusTaskMs = millis() + SBUS_UPDATE_TASK_MS;
     }
 #endif
 
     if (millis() > nextSerialTaskMs)
     {
-         //Serial.println(String(rotZ, 2));
-         //Serial.println(String(rotX, 1) + " " + String(rotY, 1));
+         Serial.println(String(rotZ, 2));
+         Serial.println(String(rotX, 1) + " " + String(rotY, 1));
         // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
         // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
         // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
-        // Serial.println(String(output.channels[ROLL]) + " " + String(output.channels[PITCH]) + " " + String(output.channels[THROTTLE]) + " " + String(output.channels[YAW]));
+         Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
         // Serial.println("Zero: " + String(thumbJoystick.calibration.zero[AXIS_X], 2) + " " + String(thumbJoystick.calibration.zero[AXIS_Y], 2));
         // Serial.println(String(thumbJoystick.raw[AXIS_X]) + " " + String(thumbJoystick.raw[AXIS_Y]) + " " + digitalRead(PIN_THUMB_JOYSTICK_SW));
         // Serial.println(String(thumbJoystick.zeroed[AXIS_X]) + " " + String(thumbJoystick.max[AXIS_X]) + " " + String(thumbJoystick.min[AXIS_X]));
         // Serial.println(String(thumbJoystick.position[AXIS_X], 2) + " " + String(thumbJoystick.position[AXIS_Y], 2));
-
+        //delay(300);
         nextSerialTaskMs = millis() + SERIAL_TASK_MS;
     }
 }
