@@ -13,8 +13,8 @@
 /*
  * Choose Trainer output type. Uncommend correcty line
  */
-#define TRAINER_MODE_SBUS
-// #define TRAINER_MODE_PPM
+//#define TRAINER_MODE_SBUS
+#define TRAINER_MODE_PPM
 
 #define MPU6050_UPDATE_TASK_MS 25
 #define OUTPUT_UPDATE_TASK_MS 20
@@ -55,7 +55,7 @@ HardwareSerial sbusSerial(1);
 uint32_t nextSbusTaskMs = 0;
 #endif
 
-#ifdef TRAINER_MODE_PPM
+//#ifdef TRAINER_MODE_PPM
 
 #define PPM_FRAME_LENGTH 22500
 #define PPM_PULSE_LENGTH 300
@@ -113,7 +113,7 @@ void IRAM_ATTR onPpmTimer() {
     digitalWrite(SERIAL1_TX, ppmOutput);
 }
 
-#endif
+//#endif
 
 TaskHandle_t i2cResourceTask;
 TaskHandle_t ioTask;
@@ -387,9 +387,9 @@ void outputSubtask()
         output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotY);
         output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
         output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE + joystickToRcChannel(thumbJoystick.position[AXIS_Y]);
-        Serial.println("sbus roll: " + String(output.channels[ROLL]));
-        Serial.println("sbus pitch: " + String(output.channels[PITCH]));
-        Serial.println("sbus yaw: " + String(output.channels[YAW]));
+        //Serial.println("sbus roll: " + String(output.channels[ROLL]));
+       // Serial.println("sbus pitch: " + String(output.channels[PITCH]));
+        //Serial.println("sbus yaw: " + String(output.channels[YAW]));
 
         for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
             output.channels[i] = constrain(output.channels[i], 1000, 2000);
@@ -543,7 +543,6 @@ void loop()
     {
         sbusPreparePacket(sbusPacket, false, false, getRcChannel_wrapper);
         sbusSerial.write(sbusPacket, SBUS_PACKET_LENGTH);
-        Serial.println("booo");
         nextSbusTaskMs = millis() + SBUS_UPDATE_TASK_MS;
     }
 #endif
