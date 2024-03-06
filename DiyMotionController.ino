@@ -3,12 +3,13 @@
 #include <Wire.h>
 #include <HardwareSerial.h>
 #include "QmuTactile.h"
-#include "sbus.h"
+#include "SBUS.h"
 #include "math.h"
 #include "types.h"
 #include "SSD1306.h"
 #include "oled_display.h"
 #include "device_node.h"
+SBUS x8r(Serial1);
 
 /*
  * Choose Trainer output type. Uncommend correcty line
@@ -50,8 +51,8 @@ DeviceNode device;
 
 #ifdef TRAINER_MODE_SBUS
 #define SBUS_UPDATE_TASK_MS 15
-uint8_t sbusPacket[SBUS_PACKET_LENGTH] = {0};
-HardwareSerial sbusSerial(1);
+//uint8_t sbusPacket[SBUS_PACKET_LENGTH] = {0};
+//HardwareSerial sbusSerial(1);
 uint32_t nextSbusTaskMs = 0;
 #endif
 
@@ -237,7 +238,8 @@ void processGyroData() {
 void setup()
 {
     Serial.begin(115200);
-
+    x8r.begin(25, 14, true, 100000);  
+    //x8r.begin();  
 #ifdef TRAINER_MODE_PPM
     pinMode(SERIAL1_TX, OUTPUT);
     timer = timerBegin(0, 80, true);
@@ -247,7 +249,7 @@ void setup()
 #endif
 
 #ifdef TRAINER_MODE_SBUS
-    sbusSerial.begin(100000, SERIAL_8E2, SERIAL1_RX, SERIAL1_TX, false, 100UL);
+    //sbusSerial.begin(100000, SERIAL_8E2, SERIAL1_RX, SERIAL1_TX, false, 100UL);
 #endif
 
     //I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
@@ -308,7 +310,8 @@ void setup()
 }
 
 //I do not get function pointers to object methods, no way...
-int getRcChannel_wrapper(uint8_t channel)
+/*
+int getRcChnnel_wrapper(uint8_t channel)
 {
     if (channel >= 0 && channel < SBUS_CHANNEL_COUNT)
     {
@@ -318,7 +321,7 @@ int getRcChannel_wrapper(uint8_t channel)
     {
         return DEFAULT_CHANNEL_VALUE;
     }
-}
+}*/
 
 void processJoystickAxis(uint8_t axis, uint8_t pin)
 {
@@ -361,11 +364,11 @@ void outputSubtask()
     if (!buttonThumb.checkFlag(TACTILE_FLAG_PRESSED)) {
         //rotZ = 0;
     }
-
+    /*
     for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++)
     {
         output.channels[i] = DEFAULT_CHANNEL_VALUE;
-    }
+    }*/
     /*
     if (buttonTrigger.getState() == TACTILE_STATE_LONG_PRESS) 
     {
@@ -383,6 +386,7 @@ void outputSubtask()
     device.setActionEnabled(true);
     if (device.getActionEnabled()) 
     {
+        /*
         output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotX);
         output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotY);
         output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
@@ -394,6 +398,16 @@ void outputSubtask()
         for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
             output.channels[i] = constrain(output.channels[i], 1000, 2000);
         }
+*/
+        uint16_t channels[16];
+        channels[0] = 1500 + angleToRcChannel(rotX);
+        Serial.println("sbus roll: " + String(channels[0]));
+        channels[1] = 1500 + angleToRcChannel(rotY);
+        Serial.println("sbus pitch: " + String(channels[1]));
+        channels[2] = 1500 - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
+        Serial.println("sbus yaw: " + String(channels[2]));
+	    Serial.println();
+        x8r.write(&channels[0]);
 
     }
 }
@@ -541,8 +555,8 @@ void loop()
 #ifdef TRAINER_MODE_SBUS
     if (millis() > nextSbusTaskMs)
     {
-        sbusPreparePacket(sbusPacket, false, false, getRcChannel_wrapper);
-        sbusSerial.write(sbusPacket, SBUS_PACKET_LENGTH);
+        //sbusPreparePacket(sbusPacket, false, false, getRcChannel_wrapper);
+        //sbusSerial.write(sbusPacket, SBUS_PACKET_LENGTH);
         Serial.println("booo");
         nextSbusTaskMs = millis() + SBUS_UPDATE_TASK_MS;
     }
@@ -555,7 +569,7 @@ void loop()
         // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
         // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
         // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
-         Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
+         //Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
         // Serial.println("Zero: " + String(thumbJoystick.calibration.zero[AXIS_X], 2) + " " + String(thumbJoystick.calibration.zero[AXIS_Y], 2));
         // Serial.println(String(thumbJoystick.raw[AXIS_X]) + " " + String(thumbJoystick.raw[AXIS_Y]) + " " + digitalRead(PIN_THUMB_JOYSTICK_SW));
         // Serial.println(String(thumbJoystick.zeroed[AXIS_X]) + " " + String(thumbJoystick.max[AXIS_X]) + " " + String(thumbJoystick.min[AXIS_X]));
