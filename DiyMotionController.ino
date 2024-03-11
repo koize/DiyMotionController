@@ -1,4 +1,3 @@
-#include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 #include <HardwareSerial.h>
@@ -26,19 +25,14 @@
 #define I2C1_SDA_PIN 21
 #define I2C1_SCL_PIN 22
 
-#define I2C2_SDA_PIN 0
-#define I2C2_SCL_PIN 23
- 
-//TwoWire I2C1 = TwoWire(0); //OLED bus
-//TwoWire I2C2 = TwoWire(1); //Gyro bus
+#define PIN_THR_DOWN 4
+#define PIN_THR_UP 0
+#define PIN_ARM 2
+#define PIN_NUKE 15
+#define PIN_CALIBRATE 13
 
-#define PIN_BUTTON_THUMB 4
-#define PIN_GPS_RX 2
-#define PIN_BUTTON_TRIGGER 15
-
-#define PIN_THUMB_JOYSTICK_X 13
-#define PIN_THUMB_JOYSTICK_Y 33
-#define PIN_THUMB_JOYSTICK_SW 32
+bool armFlag = false;
+uint64_t THR_VAL = 1000;
 
 //Adafruit_MPU6050 mpu;
 sensors_event_t acc, gyro, temp;
@@ -122,14 +116,14 @@ void IRAM_ATTR onPpmTimer() {
 
 TaskHandle_t i2cResourceTask;
 TaskHandle_t ioTask;
-//TaskHandle_t oledTask;
 
-//SSD1306Wire display(0x3c, &Wire);
-//OledDisplay oledDisplay(&display);
+QmuTactile buttonThrDown(PIN_THR_DOWN);
+QmuTactile buttonThrUp(PIN_THR_UP);
+QmuTactile buttonArm(PIN_ARM);
+QmuTactile buttonNuke(PIN_NUKE);
+QmuTactile buttonCalibrate(PIN_CALIBRATE);
 
-QmuTactile buttonTrigger(PIN_BUTTON_TRIGGER);
-QmuTactile buttonThumb(PIN_BUTTON_THUMB);
-QmuTactile buttonJoystick(PIN_THUMB_JOYSTICK_SW);
+
 
 void setup()
 {
@@ -158,31 +152,12 @@ void setup()
     sbusSerial.begin(100000, SERIAL_8E2, SERIAL1_RX, SERIAL1_TX, false, 100UL);
 #endif
 
-    //I2C1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 50000);
-    /*
-    I2C2.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, 100000);
-    if (!mpu.begin(0x68))
-    {
-        Serial.println("MPU6050 init fail");
-        while (1)
-        {
-            delay(10);
-        }
-    }
-    Serial.println("MPU6050 init success");
-
-    mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-    mpu.setGyroRange(MPU6050_RANGE_250_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-    */
-
-    //oledDisplay.init();
-    //oledDisplay.setPage(OLED_PAGE_BEACON_STATUS);
+    buttonThrDown.start();
+    buttonThrUp.start();    
+    buttonArm.start();
+    buttonNuke.start();
+    buttonCalibrate.start();
  
-
-    buttonTrigger.start();
-    buttonThumb.start();
-    buttonJoystick.start();
 
     xTaskCreatePinnedToCore(
         i2cResourceTaskHandler, /* Function to implement the task */
@@ -201,18 +176,9 @@ void setup()
         0,             /* Priority of the task */
         &ioTask,       /* Task handle. */
         0);
-    /*
-    xTaskCreatePinnedToCore(
-        oledTaskHandler, 
-        "oledTask",  
-        10000,         
-        NULL,          
-        0,            
-        &oledTask,       
-        0);*/
+   
 }
 
-//I do not get function pointers to object methods, no way...
 int getRcChannel_wrapper(uint8_t channel)
 {
     if (channel >= 0 && channel < SBUS_CHANNEL_COUNT)
@@ -225,108 +191,80 @@ int getRcChannel_wrapper(uint8_t channel)
     }
 }
 
-void processJoystickAxis(uint8_t axis, uint8_t pin)
-{
-    thumbJoystick.raw[axis] = analogRead(pin);
-    thumbJoystick.zeroed[axis] = thumbJoystick.calibration.zero[axis] - thumbJoystick.raw[axis];
-
-    if (thumbJoystick.calibration.state == CALIBRATION_DONE)
-    {
-
-        if (thumbJoystick.zeroed[axis] > thumbJoystick.max[axis])
-        {
-            thumbJoystick.max[axis] = thumbJoystick.zeroed[axis];
-        }
-
-        if (thumbJoystick.zeroed[axis] < thumbJoystick.min[axis])
-        {
-            thumbJoystick.min[axis] = thumbJoystick.zeroed[axis];
-        }
-
-        if (thumbJoystick.zeroed[axis] > 0)
-        {
-            thumbJoystick.position[axis] = fscalef(thumbJoystick.zeroed[axis], 0, thumbJoystick.max[axis], 0.0f, 1.0f);
-        }
-        else
-        {
-            thumbJoystick.position[axis] = fscalef(thumbJoystick.zeroed[axis], thumbJoystick.min[axis], 0, -1.0f, 0.0f);
-        }
-    }
-}
 
 void outputSubtask()
 {
     // Reset Z on each trigger press
-    if (buttonTrigger.checkFlag(TACTILE_FLAG_EDGE_PRESSED))
+    if (buttonThrDown.getState() == TACTILE_STATE_SHORT_PRESS)
     {
-        //rotZ = 0;
+        if (THR_VAL > 1000)
+        {
+            THR_VAL -= 100;
+        }
+        else
+        {
+            THR_VAL = 1000;
+        }
+        output.channels[THROTTLE] = THR_VAL;
+    }
+  
+    if (buttonThrUp.getState() == TACTILE_STATE_SHORT_PRESS)
+    {
+        if (THR_VAL < 2000)
+        {
+            THR_VAL += 100;
+        }
+        else
+        {
+            THR_VAL = 2000;
+        }
+        output.channels[THROTTLE] = THR_VAL;
     }
 
-    // Z updates from gyro happens only when THUMB button is pressed
-    if (!buttonThumb.checkFlag(TACTILE_FLAG_PRESSED)) {
-        //rotZ = 0;
+    if (buttonArm.getState() == TACTILE_STATE_LONG_PRESS)
+    {
+        armFlag = !armFlag;  //on startup armFlag is DISARMED
+        if (armFlag)
+        {
+            output.channels[AUX1_ARM] = 1001;
+        }
+        else
+        {
+            output.channels[AUX1_ARM] = 1999;
+        }
     }
+
+    if (buttonNuke.getState() == TACTILE_STATE_SHORT_PRESS)
+    {
+        output.channels[AUX2_NUKE] = 1999;
+    }
+    else {
+        output.channels[AUX2_NUKE] = 1001;
+    }
+
+    if (buttonCalibrate.getState() == TACTILE_STATE_SHORT_PRESS)
+    {
+        Serial.println(F("Calculating offsets, do not move MPU6050"));
+        mpu.calcOffsets();
+    }
+
 
     for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++)
     {
         output.channels[i] = DEFAULT_CHANNEL_VALUE;
     }
-    /*
-    if (buttonTrigger.getState() == TACTILE_STATE_LONG_PRESS) 
-    {
-        device.setActionEnabled(!device.getActionEnabled());
+   
+    output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
+    output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
+
+
+    for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
+        output.channels[i] = constrain(output.channels[i], 1000, 2000);
     }
-
-    if (
-        isnan(rotX) ||
-        isnan(rotY) 
-    ) {
-        //TODO Data is broken, time to react or just do nothing
-        device.setActionEnabled(false);
-    }*/
-
-    device.setActionEnabled(true);
-    if (device.getActionEnabled()) 
-    {
-        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
-        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-        output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
-        output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE;
-        output.channels[AUX1_ARM] = DEFAULT_CHANNEL_VALUE;
-        output.channels[AUX2_NUKE] = DEFAULT_CHANNEL_VALUE;
-
-
-        for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
-            output.channels[i] = constrain(output.channels[i], 1000, 2000);
-        }
-
-    }
-}
-/*
-void oledTaskHandler(void *pvParameters)
-{
-    portTickType xLastWakeTime;
-    const portTickType xPeriod = 200 / portTICK_PERIOD_MS;
-    xLastWakeTime = xTaskGetTickCount();
 
     
-     * MPU6050 and OLED share the same I2C bus
-     * To simplify the implementation and do not have to resolve resource conflicts,
-     * both tasks are called in one thread pinned to the same core
-     
-    for (;;)
-    {
-        
-         * Process OLED display
-         
-        oledDisplay.loop();
-
-        // Put task to sleep
-        vTaskDelayUntil(&xLastWakeTime, xPeriod); //There is a conflict on a I2C due to too much load. Have to put to sleep for a period of time instead
-    }
-
-    vTaskDelete(NULL);
-}*/
+}
 
 void ioTaskHandler(void *pvParameters)
 {
@@ -336,15 +274,12 @@ void ioTaskHandler(void *pvParameters)
 
     for (;;)
     {
-        buttonTrigger.loop();
-        buttonJoystick.loop();
-        buttonThumb.loop();
-
-        /*
-         * Joystick handling
-         */
-        processJoystickAxis(AXIS_X, PIN_THUMB_JOYSTICK_X);
-        processJoystickAxis(AXIS_Y, PIN_THUMB_JOYSTICK_Y);
+        buttonThrDown.loop();
+        buttonThrUp.loop();
+        buttonArm.loop();
+        buttonNuke.loop();
+        buttonCalibrate.loop();
+       
 
         outputSubtask();
 
@@ -363,45 +298,16 @@ void imuSubtask()
 
     if (prevMicros > 0)
     {
-        //TODO: Read Gyro
-            
         mpu.update();
-        
-      
-            roll = mpu.getAngleX();
-            pitch = mpu.getAngleY();
-            yaw = mpu.getAngleZ();
-            Serial.print("X : ");
-            Serial.print(roll);
-            Serial.print("\tY : ");
-            Serial.print(pitch);
-            Serial.print("\tZ : ");
-            Serial.println(yaw);
-       
-        
-        /*
-        mpu.getEvent(&acc, &gyro, &temp);
-
-        imu.accAngle.x = (atan(acc.acceleration.y / sqrt(pow(acc.acceleration.x, 2) + pow(acc.acceleration.z, 2))) * 180 / PI);
-        imu.accAngle.y = (atan(-1 * acc.acceleration.x / sqrt(pow(acc.acceleration.y, 2) + pow(acc.acceleration.z, 2))) * 180 / PI);
-
-        imu.gyro.x = (gyro.gyro.x * SENSORS_RADS_TO_DPS) - imu.gyroCalibration.zero[AXIS_X];
-        imu.gyro.y = (gyro.gyro.y * SENSORS_RADS_TO_DPS) - imu.gyroCalibration.zero[AXIS_Y];
-        imu.gyro.z = (gyro.gyro.z * SENSORS_RADS_TO_DPS) - imu.gyroCalibration.zero[AXIS_Z];
-
-        imu.gyroNormalized.x = imu.gyro.x * dT;
-        imu.gyroNormalized.y = imu.gyro.y * dT;
-        imu.gyroNormalized.z = imu.gyro.z * dT;
-
-        imu.angle.x = (0.95 * (imu.angle.x + imu.gyroNormalized.x)) + (0.05 * imu.accAngle.x);
-        imu.angle.y = (0.95 * (imu.angle.y + imu.gyroNormalized.y)) + (0.05 * imu.accAngle.y);
-        imu.angle.z = imu.angle.z + imu.gyroNormalized.z;
-
-        /*
-         * Calibration Routine
-         */
-        /*
-        */
+        roll = mpu.getAngleX();
+        pitch = mpu.getAngleY();
+        yaw = mpu.getAngleZ();
+        Serial.print("X : ");
+        Serial.print(roll);
+        Serial.print("\tY : ");
+        Serial.print(pitch);
+        Serial.print("\tZ : ");
+        Serial.println(yaw);
     }
 }
 
@@ -410,25 +316,9 @@ void i2cResourceTaskHandler(void *pvParameters)
     portTickType xLastWakeTime;
     const portTickType xPeriod = MPU6050_UPDATE_TASK_MS / portTICK_PERIOD_MS;
     xLastWakeTime = xTaskGetTickCount();
-
-    /*
-     * MPU6050 and OLED share the same I2C bus
-     * To simplify the implementation and do not have to resolve resource conflicts,
-     * both tasks are called in one thread pinned to the same core
-     */
     for (;;)
     {
-        /*
-        * Read gyro
-        */
         imuSubtask();
-
-        /*
-         * Process OLED display
-         */
-        // oledDisplay.loop();
-
-        // Put task to sleep
         vTaskDelayUntil(&xLastWakeTime, xPeriod);
     }
 
@@ -463,16 +353,6 @@ void loop()
 
     if (millis() > nextSerialTaskMs)
     {
-  
-        // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
-        // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
-        // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
-         //Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
-        // Serial.println("Zero: " + String(thumbJoystick.calibration.zero[AXIS_X], 2) + " " + String(thumbJoystick.calibration.zero[AXIS_Y], 2));
-        // Serial.println(String(thumbJoystick.raw[AXIS_X]) + " " + String(thumbJoystick.raw[AXIS_Y]) + " " + digitalRead(PIN_THUMB_JOYSTICK_SW));
-        // Serial.println(String(thumbJoystick.zeroed[AXIS_X]) + " " + String(thumbJoystick.max[AXIS_X]) + " " + String(thumbJoystick.min[AXIS_X]));
-        // Serial.println(String(thumbJoystick.position[AXIS_X], 2) + " " + String(thumbJoystick.position[AXIS_Y], 2));
-        //delay(300);
         nextSerialTaskMs = millis() + SERIAL_TASK_MS;
     }
 }
