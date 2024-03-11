@@ -554,7 +554,7 @@ void loop()
         // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
         // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
         // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
-         Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
+         //Serial.println("roll: " + String(output.channels[ROLL]) + " " + "pitch: " +  String(output.channels[PITCH]) + " " + "thr: " + String(output.channels[THROTTLE]) + " " + "yaw: " + String(output.channels[YAW]));
         // Serial.println("Zero: " + String(thumbJoystick.calibration.zero[AXIS_X], 2) + " " + String(thumbJoystick.calibration.zero[AXIS_Y], 2));
         // Serial.println(String(thumbJoystick.raw[AXIS_X]) + " " + String(thumbJoystick.raw[AXIS_Y]) + " " + digitalRead(PIN_THUMB_JOYSTICK_SW));
         // Serial.println(String(thumbJoystick.zeroed[AXIS_X]) + " " + String(thumbJoystick.max[AXIS_X]) + " " + String(thumbJoystick.min[AXIS_X]));
