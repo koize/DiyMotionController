@@ -9,6 +9,8 @@
 #include "SSD1306.h"
 #include "oled_display.h"
 #include "device_node.h"
+#include "MPU6050_light.h"
+
 
 /*
  * Choose Trainer output type. Uncommend correcty line
@@ -38,7 +40,7 @@
 #define PIN_THUMB_JOYSTICK_Y 33
 #define PIN_THUMB_JOYSTICK_SW 32
 
-Adafruit_MPU6050 mpu;
+//Adafruit_MPU6050 mpu;
 sensors_event_t acc, gyro, temp;
 
 uint32_t nextSerialTaskMs = 0;
@@ -47,6 +49,9 @@ imuData_t imu;
 dataOutput_t output;
 thumb_joystick_t thumbJoystick;
 DeviceNode device;
+
+MPU6050 mpu(Wire);
+int roll, pitch, yaw;
 
 #ifdef TRAINER_MODE_SBUS
 #define SBUS_UPDATE_TASK_MS 15
@@ -126,117 +131,20 @@ QmuTactile buttonTrigger(PIN_BUTTON_TRIGGER);
 QmuTactile buttonThumb(PIN_BUTTON_THUMB);
 QmuTactile buttonJoystick(PIN_THUMB_JOYSTICK_SW);
 
-long accelX, accelY, accelZ;
-float gForceX, gForceY, gForceZ;
-
-long gyroX, gyroY, gyroZ;
-float rotX, rotY, rotZ;
-
-void sensorCalibrate(struct gyroCalibration_t *cal, float sampleX, float sampleY, float sampleZ, const float dev)
-{
-    if (cal->state == CALIBARTION_NOT_DONE)
-    {
-        cal->state = CALIBRATION_IN_PROGRESS;
-        cal->sampleCount = 0;
-        devClear(&cal->deviation[AXIS_X]);
-        devClear(&cal->deviation[AXIS_Y]);
-        devClear(&cal->deviation[AXIS_Z]);
-        cal->accumulatedValue[AXIS_X] = 0;
-        cal->accumulatedValue[AXIS_Y] = 0;
-        cal->accumulatedValue[AXIS_Z] = 0;
-    }
-    if (cal->state == CALIBRATION_IN_PROGRESS)
-    {
-        cal->sampleCount++;
-        devPush(&cal->deviation[AXIS_X], sampleX);
-        devPush(&cal->deviation[AXIS_Y], sampleY);
-        devPush(&cal->deviation[AXIS_Z], sampleZ);
-        cal->accumulatedValue[AXIS_X] += sampleX;
-        cal->accumulatedValue[AXIS_Y] += sampleY;
-        cal->accumulatedValue[AXIS_Z] += sampleZ;
-
-        if (cal->sampleCount == 40)
-        {
-
-            if (
-                devStandardDeviation(&cal->deviation[AXIS_X]) > dev ||
-                devStandardDeviation(&cal->deviation[AXIS_Y]) > dev ||
-                devStandardDeviation(&cal->deviation[AXIS_Z]) > dev)
-            {
-                cal->sampleCount = 0;
-                devClear(&cal->deviation[AXIS_X]);
-                devClear(&cal->deviation[AXIS_Y]);
-                devClear(&cal->deviation[AXIS_Z]);
-                cal->accumulatedValue[AXIS_X] = 0;
-                cal->accumulatedValue[AXIS_Y] = 0;
-                cal->accumulatedValue[AXIS_Z] = 0;
-            }
-            else
-            {
-                cal->zero[AXIS_X] = cal->accumulatedValue[AXIS_X] / cal->sampleCount;
-                cal->zero[AXIS_Y] = cal->accumulatedValue[AXIS_Y] / cal->sampleCount;
-                cal->zero[AXIS_Z] = cal->accumulatedValue[AXIS_Z] / cal->sampleCount;
-                cal->state = CALIBRATION_DONE;
-            }
-        }
-    }
-}
-
-void setupMPU(){
-  Wire.beginTransmission(0b1101000); //This is the I2C address of the MPU (b1101000/b1101001 for AC0 low/high datasheet sec. 9.2)
-  Wire.write(0x6B); //Accessing the register 6B - Power Management (Sec. 4.28)
-  Wire.write(0b00000000); //Setting SLEEP register to 0. (Required; see Note on p. 9)
-  Wire.endTransmission();  
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x1B); //Accessing the register 1B - Gyroscope Configuration (Sec. 4.4) 
-  Wire.write(0x00000000); //Setting the gyro to full scale +/- 250deg./s 
-  Wire.endTransmission(); 
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x1C); //Accessing the register 1C - Acccelerometer Configuration (Sec. 4.5) 
-  Wire.write(0b00000000); //Setting the accel to +/- 2g
-  Wire.endTransmission(); 
-}
-
-void recordAccelRegisters() {
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x3B); //Starting register for Accel Readings
-  Wire.endTransmission();
-  Wire.requestFrom(0b1101000,6); //Request Accel Registers (3B - 40)
-  //while(Wire.available() < 6);
-  accelX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
-  accelY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
-  accelZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  processAccelData();
-}
-
-void processAccelData(){
-  gForceX = accelX / 16384.0;
-  gForceY = accelY / 16384.0; 
-  gForceZ = accelZ / 16384.0;
-}
-
-void recordGyroRegisters() {
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x43); //Starting register for Gyro Readings
-  Wire.endTransmission();
-  Wire.requestFrom(0b1101000,6); //Request Gyro Registers (43 - 48)
-  //while(Wire.available() < 6);
-  gyroX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
-  gyroY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
-  gyroZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  processGyroData();
-}
-
-void processGyroData() {
-  rotX = gyroX / 131.0;
-  rotY = gyroY / 131.0; 
-  rotZ = gyroZ / 131.0;
-}
-
-
 void setup()
 {
     Serial.begin(115200);
+    Wire.begin();
+    byte status = mpu.begin();
+    Serial.print(F("MPU6050 status: "));
+    Serial.println(status);
+    while(status!=0){ } // stop everything if could not connect to MPU6050
+    
+    Serial.println(F("Calculating offsets, do not move MPU6050"));
+    delay(1000);
+    // mpu.upsideDownMounting = true; // uncomment this line if the MPU6050 is mounted upside-down
+    mpu.calcOffsets(); // gyro and accelero
+    Serial.println("Done!\n");
 
 #ifdef TRAINER_MODE_PPM
     pinMode(SERIAL1_TX, OUTPUT);
@@ -267,13 +175,10 @@ void setup()
     mpu.setGyroRange(MPU6050_RANGE_250_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
     */
-    delay(50);
 
     //oledDisplay.init();
     //oledDisplay.setPage(OLED_PAGE_BEACON_STATUS);
-    Wire.begin();
-    setupMPU();
-    delay(50);
+ 
 
     buttonTrigger.start();
     buttonThumb.start();
@@ -354,7 +259,7 @@ void outputSubtask()
     // Reset Z on each trigger press
     if (buttonTrigger.checkFlag(TACTILE_FLAG_EDGE_PRESSED))
     {
-        rotZ = 0;
+        //rotZ = 0;
     }
 
     // Z updates from gyro happens only when THUMB button is pressed
@@ -383,13 +288,13 @@ void outputSubtask()
     device.setActionEnabled(true);
     if (device.getActionEnabled()) 
     {
-        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotX);
-        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(rotY);
-        output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(rotZ) + joystickToRcChannel(thumbJoystick.position[AXIS_X]);
-        output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE + joystickToRcChannel(thumbJoystick.position[AXIS_Y]);
-        //Serial.println("sbus roll: " + String(output.channels[ROLL]));
-       // Serial.println("sbus pitch: " + String(output.channels[PITCH]));
-        //Serial.println("sbus yaw: " + String(output.channels[YAW]));
+        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
+        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
+        output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
+        output.channels[THROTTLE] = DEFAULT_CHANNEL_VALUE;
+        output.channels[AUX1_ARM] = DEFAULT_CHANNEL_VALUE;
+        output.channels[AUX2_NUKE] = DEFAULT_CHANNEL_VALUE;
+
 
         for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
             output.channels[i] = constrain(output.channels[i], 1000, 2000);
@@ -440,7 +345,6 @@ void ioTaskHandler(void *pvParameters)
          */
         processJoystickAxis(AXIS_X, PIN_THUMB_JOYSTICK_X);
         processJoystickAxis(AXIS_Y, PIN_THUMB_JOYSTICK_Y);
-        //sensorCalibrate(&thumbJoystick.calibration, thumbJoystick.raw[AXIS_X], thumbJoystick.raw[AXIS_Y], 0, 3.0f);
 
         outputSubtask();
 
@@ -459,11 +363,22 @@ void imuSubtask()
 
     if (prevMicros > 0)
     {
-        recordAccelRegisters();
-        recordGyroRegisters();
-        imu.angle.x = rotX;
-        imu.angle.y = rotY;
-        imu.angle.z = rotZ;
+        //TODO: Read Gyro
+            
+        mpu.update();
+        
+      
+            roll = mpu.getAngleX();
+            pitch = mpu.getAngleY();
+            yaw = mpu.getAngleZ();
+            Serial.print("X : ");
+            Serial.print(roll);
+            Serial.print("\tY : ");
+            Serial.print(pitch);
+            Serial.print("\tZ : ");
+            Serial.println(yaw);
+       
+        
         /*
         mpu.getEvent(&acc, &gyro, &temp);
 
@@ -486,7 +401,6 @@ void imuSubtask()
          * Calibration Routine
          */
         /*
-        sensorCalibrate(&imu.gyroCalibration, imu.gyro.x, imu.gyro.y, imu.gyro.z, 3.0f);
         */
     }
 }
@@ -549,8 +463,7 @@ void loop()
 
     if (millis() > nextSerialTaskMs)
     {
-         Serial.println(String(rotZ, 2));
-         Serial.println(String(rotX, 1) + " " + String(rotY, 1));
+  
         // Serial.println("Zero: " + String(imu.gyroCalibration.zero[AXIS_X], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Y], 2) + " " + String(imu.gyroCalibration.zero[AXIS_Z], 2));
         // Serial.println("Gyro: " + String(imu.gyro.x, 2) + " " + String(imu.gyro.y, 2) + " " + String(imu.gyro.z, 2));
         // Serial.println(String(devStandardDeviation(&imu.gyroCalDevX), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevY), 1) + " " + String(devStandardDeviation(&imu.gyroCalDevZ), 1));
