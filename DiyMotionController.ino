@@ -16,7 +16,6 @@
  */
 //#define TRAINER_MODE_SBUS
 #define TRAINER_MODE_PPM
-
 #define MPU6050_UPDATE_TASK_MS 25
 #define OUTPUT_UPDATE_TASK_MS 20
 #define SERIAL_TASK_MS 50
@@ -24,7 +23,7 @@
 #define SERIAL1_TX 14
 #define I2C1_SDA_PIN 21
 #define I2C1_SCL_PIN 22
-
+int THR_VAL = 1000;
 #define PIN_THR_DOWN 4
 #define PIN_THR_UP 0
 #define PIN_ARM 2
@@ -32,7 +31,6 @@
 #define PIN_CALIBRATE 13
 
 bool armFlag = false;
-uint64_t THR_VAL = 1000;
 
 //Adafruit_MPU6050 mpu;
 sensors_event_t acc, gyro, temp;
@@ -124,11 +122,11 @@ QmuTactile buttonNuke(PIN_NUKE);
 QmuTactile buttonCalibrate(PIN_CALIBRATE);
 
 
-
 void setup()
 {
     Serial.begin(115200);
     Wire.begin();
+    Serial.println("Initial THR_VAL: "+ THR_VAL);
     byte status = mpu.begin();
     Serial.print(F("MPU6050 status: "));
     Serial.println(status);
@@ -176,6 +174,8 @@ void setup()
         0,             /* Priority of the task */
         &ioTask,       /* Task handle. */
         0);
+
+    
    
 }
 
@@ -194,52 +194,48 @@ int getRcChannel_wrapper(uint8_t channel)
 
 void outputSubtask()
 {
-    // Reset Z on each trigger press
-    if (buttonThrDown.getState() == TACTILE_STATE_SHORT_PRESS)
+   
+    output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
+    output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
+    if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        if (THR_VAL > 1000)
-        {
-            THR_VAL -= 100;
-        }
-        else
-        {
-            THR_VAL = 1000;
-        }
-        output.channels[THROTTLE] = THR_VAL;
+        output.channels[THROTTLE] = THR_VAL - THROTTLE_BUTTON_STEP;
+        Serial.println("THR_DEC: " + (THR_VAL - THROTTLE_BUTTON_STEP));
+        THR_VAL -= THROTTLE_BUTTON_STEP;
     }
   
-    if (buttonThrUp.getState() == TACTILE_STATE_SHORT_PRESS)
+    if (buttonThrUp.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        if (THR_VAL < 2000)
-        {
-            THR_VAL += 100;
-        }
-        else
-        {
-            THR_VAL = 2000;
-        }
-        output.channels[THROTTLE] = THR_VAL;
+        output.channels[THROTTLE] = THR_VAL + THROTTLE_BUTTON_STEP;
+        Serial.println("THR_INC: " + (THR_VAL + THROTTLE_BUTTON_STEP));
+        THR_VAL += THROTTLE_BUTTON_STEP;
     }
 
-    if (buttonArm.getState() == TACTILE_STATE_LONG_PRESS)
+    if (buttonArm.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        armFlag = !armFlag;  //on startup armFlag is DISARMED
+        armFlag = !armFlag;
+        Serial.println("arm button pressed");
         if (armFlag)
         {
-            output.channels[AUX1_ARM] = 1001;
+            Serial.println("armed");
+            output.channels[AUX1_ARM] = 2000;
         }
         else
         {
-            output.channels[AUX1_ARM] = 1999;
+            Serial.println("disarmed");
+            output.channels[AUX1_ARM] = 1000;
         }
     }
 
-    if (buttonNuke.getState() == TACTILE_STATE_SHORT_PRESS)
+    if (buttonNuke.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        output.channels[AUX2_NUKE] = 1999;
+        output.channels[AUX2_NUKE] = 2000;
+        delay(90);
+        Serial.println("NUKE");
     }
     else {
-        output.channels[AUX2_NUKE] = 1001;
+        output.channels[AUX2_NUKE] = 1000;
     }
 
     if (buttonCalibrate.getState() == TACTILE_STATE_SHORT_PRESS)
@@ -248,18 +244,7 @@ void outputSubtask()
         mpu.calcOffsets();
     }
 
-
-    for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++)
-    {
-        output.channels[i] = DEFAULT_CHANNEL_VALUE;
-    }
-   
-    output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
-    output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
-
-
-    for (uint8_t i = 0; i < SBUS_CHANNEL_COUNT; i++) {
+    for (uint8_t i = 0; i < 16; i++) {
         output.channels[i] = constrain(output.channels[i], 1000, 2000);
     }
 
@@ -302,12 +287,14 @@ void imuSubtask()
         roll = mpu.getAngleX();
         pitch = mpu.getAngleY();
         yaw = mpu.getAngleZ();
+        
         Serial.print("X : ");
         Serial.print(roll);
         Serial.print("\tY : ");
         Serial.print(pitch);
         Serial.print("\tZ : ");
         Serial.println(yaw);
+        
     }
 }
 
