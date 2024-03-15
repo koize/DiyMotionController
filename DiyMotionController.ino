@@ -133,7 +133,6 @@ void setup()
     while(status!=0){ } // stop everything if could not connect to MPU6050
     
     Serial.println(F("Calculating offsets, do not move MPU6050"));
-    delay(1000);
     // mpu.upsideDownMounting = true; // uncomment this line if the MPU6050 is mounted upside-down
     mpu.calcOffsets(); // gyro and accelero
     Serial.println("Done!\n");
@@ -197,19 +196,38 @@ void outputSubtask()
    
     output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
     output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(yaw);
+    //output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.3 * angleToRcChannel(yaw));
     if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        output.channels[THROTTLE] = THR_VAL - THROTTLE_BUTTON_STEP;
-        Serial.println("THR_DEC: " + (THR_VAL - THROTTLE_BUTTON_STEP));
-        THR_VAL -= THROTTLE_BUTTON_STEP;
+        if (THR_VAL - THROTTLE_BUTTON_STEP < 1000) // 1000 is the minimum value for throttle
+        {
+            output.channels[THROTTLE] = 1000;
+            Serial.println("THR_DEC: 1000");
+            THR_VAL = 1000;
+        }
+        else
+        {
+            output.channels[THROTTLE] = THR_VAL - THROTTLE_BUTTON_STEP;
+            Serial.println("THR_DEC: " + (THR_VAL - THROTTLE_BUTTON_STEP));
+            THR_VAL -= THROTTLE_BUTTON_STEP;
+        }
+   
     }
   
     if (buttonThrUp.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        output.channels[THROTTLE] = THR_VAL + THROTTLE_BUTTON_STEP;
-        Serial.println("THR_INC: " + (THR_VAL + THROTTLE_BUTTON_STEP));
-        THR_VAL += THROTTLE_BUTTON_STEP;
+        if (THR_VAL + THROTTLE_BUTTON_STEP > 2000) // 2000 is the maximum value for throttle
+        {
+            output.channels[THROTTLE] = 2000;
+            Serial.println("THR_INC: 2000");
+            THR_VAL = 2000;
+        }
+        else
+        {
+            output.channels[THROTTLE] = THR_VAL + THROTTLE_BUTTON_STEP;
+            Serial.println("THR_INC: " + (THR_VAL + THROTTLE_BUTTON_STEP));
+            THR_VAL += THROTTLE_BUTTON_STEP;
+        }
     }
 
     if (buttonArm.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
@@ -230,18 +248,22 @@ void outputSubtask()
 
     if (buttonNuke.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
-        output.channels[AUX2_NUKE] = 2000;
-        delay(90);
+        output.channels[AUX2_NUKE] = 1000;
+        delay(150);
         Serial.println("NUKE");
     }
     else {
-        output.channels[AUX2_NUKE] = 1000;
+        output.channels[AUX2_NUKE] = 2000;
     }
 
     if (buttonCalibrate.getState() == TACTILE_STATE_SHORT_PRESS)
     {
         Serial.println(F("Calculating offsets, do not move MPU6050"));
-        mpu.calcOffsets();
+        output.channels[ROLL] = DEFAULT_CHANNEL_VALUE;
+        output.channels[PITCH] = DEFAULT_CHANNEL_VALUE;
+        output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
+        mpu.calcOffsets(1,1);
+        Serial.println("Done!\n");
     }
 
     for (uint8_t i = 0; i < 16; i++) {

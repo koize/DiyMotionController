@@ -6,7 +6,7 @@
 #define AXIS_COUNT 3
 #define SBUS_CHANNEL_COUNT 16
 #define DEFAULT_CHANNEL_VALUE 1500
-#define THROTTLE_BUTTON_STEP 100
+#define THROTTLE_BUTTON_STEP 25
 
 #include <Arduino.h>
 
@@ -29,7 +29,7 @@ typedef enum
     THROTTLE = 2,
     YAW = 3,
     AUX1_ARM = 4,
-    AUX2_NUKE = 5
+    AUX2_NUKE = 8
 } channel_functions_e;
 
 enum calibrationState_e
