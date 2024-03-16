@@ -155,12 +155,14 @@ void MPU6050::calcOffsets(bool is_calc_gyro, bool is_calc_acc){
     accXoffset = ag[0] / CALIB_OFFSET_NB_MES;
     accYoffset = ag[1] / CALIB_OFFSET_NB_MES;
     accZoffset = ag[2] / CALIB_OFFSET_NB_MES;
+   
   }
   
   if(is_calc_gyro){
     gyroXoffset = ag[3] / CALIB_OFFSET_NB_MES;
     gyroYoffset = ag[4] / CALIB_OFFSET_NB_MES;
-    gyroZoffset = ag[5] / CALIB_OFFSET_NB_MES;
+    //gyroZoffset = ag[5] / CALIB_OFFSET_NB_MES;
+    gyroZoffset = -1.7;
   }
 }
 
@@ -186,8 +188,8 @@ void MPU6050::fetchData(){
   gyroX = ((float)rawData[4]) / gyro_lsb_to_degsec - gyroXoffset;
   gyroY = ((float)rawData[5]) / gyro_lsb_to_degsec - gyroYoffset;
   gyroZ = ((float)rawData[6]) / gyro_lsb_to_degsec - gyroZoffset;
-  if(gyroZ>0 && gyroZ<0.4) {gyroZ=0;}
-  if(gyroZ<0 && gyroZ>-0.4) {gyroZ=0;}
+  if(gyroZ>0 && gyroZ<10) {gyroZ=0;}
+  if(gyroZ<0 && gyroZ>10) {gyroZ=0;}
 }
 
 void MPU6050::update(){
@@ -207,7 +209,8 @@ void MPU6050::update(){
   // https://github.com/gabriel-milan/TinyMPU6050/issues/6
   angleX = wrap(filterGyroCoef*(angleAccX + wrap(angleX +     gyroX*dt - angleAccX,180)) + (1.0-filterGyroCoef)*angleAccX,180);
   angleY = wrap(filterGyroCoef*(angleAccY + wrap(angleY + sgZ*gyroY*dt - angleAccY, 90)) + (1.0-filterGyroCoef)*angleAccY, 90);
-  angleZ += gyroZ*dt; // not wrapped
+  angleZ += gyroZ*dt;
+  angleZ = wrap(angleZ, 180);
 
   
 

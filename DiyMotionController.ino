@@ -9,6 +9,7 @@
 #include "oled_display.h"
 #include "device_node.h"
 #include "MPU6050_light.h"
+using namespace std; 
 
 
 /*
@@ -196,7 +197,8 @@ void outputSubtask()
    
     output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
     output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.1 * angleToRcChannel(yaw));
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
+    //output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.15 * angleToRcChannel(yaw));
     if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
         if (THR_VAL - THROTTLE_BUTTON_STEP < 1000) // 1000 is the minimum value for throttle
@@ -310,6 +312,10 @@ void imuSubtask()
         roll = mpu.getAngleX();
         pitch = mpu.getAngleY();
         yaw = mpu.getAngleZ();
+
+      
+        //Serial.println(mpu.getGyroZoffset());
+        //Serial.println(mpu.getAccZoffset());
         
         Serial.print("X : ");
         Serial.print(roll);

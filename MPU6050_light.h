@@ -27,7 +27,7 @@
 #define MPU6050_ACCEL_OUT_REGISTER    0x3B
 
 #define RAD_2_DEG             57.29578 // [deg/rad]
-#define CALIB_OFFSET_NB_MES   500
+#define CALIB_OFFSET_NB_MES   250 //def 500
 #define TEMP_LSB_2_DEGREE     340.0    // [bit/celsius]
 #define TEMP_LSB_OFFSET       12412.0
 
