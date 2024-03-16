@@ -29,7 +29,7 @@ typedef enum
     THROTTLE = 2,
     YAW = 3,
     AUX1_ARM = 4,
-    AUX2_NUKE = 8
+    AUX2_NUKE = 5
 } channel_functions_e;
 
 enum calibrationState_e

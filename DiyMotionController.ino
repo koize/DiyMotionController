@@ -196,7 +196,7 @@ void outputSubtask()
    
     output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
     output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-    //output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.3 * angleToRcChannel(yaw));
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.1 * angleToRcChannel(yaw));
     if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
         if (THR_VAL - THROTTLE_BUTTON_STEP < 1000) // 1000 is the minimum value for throttle
@@ -258,11 +258,12 @@ void outputSubtask()
 
     if (buttonCalibrate.getState() == TACTILE_STATE_SHORT_PRESS)
     {
-        Serial.println(F("Calculating offsets, do not move MPU6050"));
+        Serial.println(F("recalibrating"));
         output.channels[ROLL] = DEFAULT_CHANNEL_VALUE;
         output.channels[PITCH] = DEFAULT_CHANNEL_VALUE;
         output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
-        mpu.calcOffsets(1,1);
+        mpu.calcOffsets();
+        mpu.resetAllAngles();
         Serial.println("Done!\n");
     }
 

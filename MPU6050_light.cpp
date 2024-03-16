@@ -209,4 +209,24 @@ void MPU6050::update(){
   angleY = wrap(filterGyroCoef*(angleAccY + wrap(angleY + sgZ*gyroY*dt - angleAccY, 90)) + (1.0-filterGyroCoef)*angleAccY, 90);
   angleZ += gyroZ*dt; // not wrapped
 
+  
+
+}
+
+/* RESET ANGLE */
+
+void MPU6050::resetAllAngles(){
+  angleX = angleY = angleZ = 0;
+}
+
+void MPU6050::resetAngleX(){
+  angleX = 0;
+}
+
+void MPU6050::resetAngleY(){
+  angleY = 0;
+}
+
+void MPU6050::resetAngleZ(){
+  angleZ = 0;
 }
