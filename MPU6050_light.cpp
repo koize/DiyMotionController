@@ -162,7 +162,7 @@ void MPU6050::calcOffsets(bool is_calc_gyro, bool is_calc_acc){
     gyroXoffset = ag[3] / CALIB_OFFSET_NB_MES;
     gyroYoffset = ag[4] / CALIB_OFFSET_NB_MES;
     //gyroZoffset = ag[5] / CALIB_OFFSET_NB_MES;
-    gyroZoffset = -1.7;
+    gyroZoffset = -1.739;
   }
 }
 

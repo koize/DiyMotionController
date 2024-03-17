@@ -197,8 +197,8 @@ void outputSubtask()
    
     output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
     output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
-    output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
-    //output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.15 * angleToRcChannel(yaw));
+    //output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.2 * angleToRcChannel(yaw));
     if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
         if (THR_VAL - THROTTLE_BUTTON_STEP < 1000) // 1000 is the minimum value for throttle
