@@ -8,7 +8,9 @@
 #include "SSD1306.h"
 #include "oled_display.h"
 #include "device_node.h"
-#include "MPU6050_light.h"
+#include "I2Cdev.h"
+#include "MPU6050_6Axis_MotionApps20.h"
+
 using namespace std; 
 
 
@@ -34,7 +36,7 @@ int THR_VAL = 1000;
 bool armFlag = false;
 
 //Adafruit_MPU6050 mpu;
-sensors_event_t acc, gyro, temp;
+//sensors_event_t acc, gyro, temp;
 
 uint32_t nextSerialTaskMs = 0;
 
@@ -43,8 +45,41 @@ dataOutput_t output;
 thumb_joystick_t thumbJoystick;
 DeviceNode device;
 
-MPU6050 mpu(Wire);
+//MPU6050 mpu(Wire);
+MPU6050 mpu;
 int roll, pitch, yaw;
+#define OUTPUT_READABLE_YAWPITCHROLL
+#define INTERRUPT_PIN 2  // use pin 2 on Arduino Uno & most boards
+// MPU control/status vars
+bool dmpReady = false;  // set true if DMP init was successful
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
+uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
+
+// orientation/motion vars
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+VectorFloat gravity;    // [x, y, z]            gravity vector
+float euler[3];         // [psi, theta, phi]    Euler angle container
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+// packet structure for InvenSense teapot demo
+uint8_t teapotPacket[14] = { '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
+
+
+
+// ================================================================
+// ===               INTERRUPT DETECTION ROUTINE                ===
+// ================================================================
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady() {
+    mpuInterrupt = true;
+}
 
 #ifdef TRAINER_MODE_SBUS
 #define SBUS_UPDATE_TASK_MS 15
@@ -126,8 +161,62 @@ QmuTactile buttonCalibrate(PIN_CALIBRATE);
 void setup()
 {
     Serial.begin(115200);
-    Wire.begin();
-    Serial.println("Initial THR_VAL: "+ THR_VAL);
+    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+        Wire.begin();
+        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+        Wire.setTimeout(3000); //timeout value in uSec. Used to fix Serial Freezing after few secs
+    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+        Fastwire::setup(400, true);
+    #endif
+
+    mpu.initialize();
+    pinMode(INTERRUPT_PIN, INPUT);
+    Serial.println(F("Testing device connections..."));
+    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+
+     // load and configure the DMP
+    Serial.println(F("Initializing DMP..."));
+    devStatus = mpu.dmpInitialize();
+
+    // supply your own gyro offsets here, scaled for min sensitivity
+    mpu.setXGyroOffset(220);
+    mpu.setYGyroOffset(76);
+    mpu.setZGyroOffset(-84);
+    mpu.setZAccelOffset(820); // 1688 factory default for my test chip
+
+    // make sure it worked (returns 0 if so)
+    if (devStatus == 0) {
+        // Calibration Time: generate offsets and calibrate our MPU6050
+        mpu.CalibrateAccel(6);
+        mpu.CalibrateGyro(6);
+        mpu.PrintActiveOffsets();
+        // turn on the DMP, now that it's ready
+        Serial.println(F("Enabling DMP..."));
+        mpu.setDMPEnabled(true);
+
+        // enable Arduino interrupt detection
+        Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
+        Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
+        Serial.println(F(")..."));
+        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+        mpuIntStatus = mpu.getIntStatus();
+
+        // set our DMP Ready flag so the main loop() function knows it's okay to use it
+        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        dmpReady = true;
+
+        // get expected DMP packet size for later comparison
+        packetSize = mpu.dmpGetFIFOPacketSize();
+    } else {
+        // ERROR!
+        // 1 = initial memory load failed
+        // 2 = DMP configuration updates failed
+        // (if it's going to break, usually the code will be 1)
+        Serial.print(F("DMP Initialization failed (code "));
+        Serial.print(devStatus);
+        Serial.println(F(")"));
+    }
+    /*
     byte status = mpu.begin();
     Serial.print(F("MPU6050 status: "));
     Serial.println(status);
@@ -136,7 +225,7 @@ void setup()
     Serial.println(F("Calculating offsets, do not move MPU6050"));
     // mpu.upsideDownMounting = true; // uncomment this line if the MPU6050 is mounted upside-down
     mpu.calcOffsets(); // gyro and accelero
-    Serial.println("Done!\n");
+    Serial.println("Done!\n");*/
 
 #ifdef TRAINER_MODE_PPM
     pinMode(SERIAL1_TX, OUTPUT);
@@ -196,9 +285,9 @@ void outputSubtask()
 {
    
     output.channels[ROLL] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(roll);
-    output.channels[PITCH] = DEFAULT_CHANNEL_VALUE + angleToRcChannel(pitch);
+    output.channels[PITCH] = DEFAULT_CHANNEL_VALUE - angleToRcChannel(pitch);
     //output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
-    output.channels[YAW] = DEFAULT_CHANNEL_VALUE - (0.2 * angleToRcChannel(yaw));
+    output.channels[YAW] = DEFAULT_CHANNEL_VALUE + (0.2 * angleToRcChannel(yaw));
     if (buttonThrDown.getFlags() & TACTILE_FLAG_EDGE_PRESSED)
     {
         if (THR_VAL - THROTTLE_BUTTON_STEP < 1000) // 1000 is the minimum value for throttle
@@ -264,9 +353,23 @@ void outputSubtask()
         output.channels[ROLL] = DEFAULT_CHANNEL_VALUE;
         output.channels[PITCH] = DEFAULT_CHANNEL_VALUE;
         output.channels[YAW] = DEFAULT_CHANNEL_VALUE;
+
+        dmpReady = false;
+        //mpu.setDMPEnabled(false);
+        //mpu.initialize();
+        //mpu.resetSensors();
+        mpu.CalibrateGyro(1);
+        mpu.CalibrateAccel(1);
+        dmpReady = true;
+        //mpu.PrintActiveOffsets();
+        //mpu.setDMPEnabled(true);
+        //dmpReady = true;
+
+        /*
         mpu.calcOffsets();
         mpu.resetAllAngles();
         Serial.println("Done!\n");
+        */
     }
 
     for (uint8_t i = 0; i < 16; i++) {
@@ -308,6 +411,18 @@ void imuSubtask()
 
     if (prevMicros > 0)
     {
+         if (!dmpReady) return;
+
+         if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { // Get the Latest packet 
+            // display Euler angles in degrees
+            mpu.dmpGetQuaternion(&q, fifoBuffer);
+            mpu.dmpGetGravity(&gravity, &q);
+            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+            roll = ypr[2] * 180/M_PI;
+            pitch = ypr[1] * 180/M_PI;
+            yaw = ypr[0] * 180/M_PI;
+    }
+        /*
         mpu.update();
         roll = mpu.getAngleX();
         pitch = mpu.getAngleY();
@@ -316,6 +431,7 @@ void imuSubtask()
       
         //Serial.println(mpu.getGyroZoffset());
         //Serial.println(mpu.getAccZoffset());
+        */
         
         Serial.print("X : ");
         Serial.print(roll);

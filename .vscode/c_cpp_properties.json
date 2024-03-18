@@ -238,6 +238,8 @@
                 "C:\\Users\\justi\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.12\\variants\\ttgo-lora32-v21new",
                 "C:\\Users\\justi\\Documents\\Arduino\\libraries\\Adafruit_Unified_Sensor",
                 "C:\\Users\\justi\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.12\\libraries\\Wire\\src",
+                "C:\\Users\\justi\\Documents\\Arduino\\libraries\\I2Cdev",
+                "C:\\Users\\justi\\Documents\\Arduino\\libraries\\MPU6050",
                 "c:\\users\\justi\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0",
                 "c:\\users\\justi\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0\\xtensa-esp32-elf",
                 "c:\\users\\justi\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0\\backward",
