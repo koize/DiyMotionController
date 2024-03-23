@@ -30,8 +30,8 @@ int THR_VAL = 1000;
 #define PIN_THR_DOWN 4
 #define PIN_THR_UP 0
 #define PIN_ARM 2
-#define PIN_NUKE 15
-#define PIN_CALIBRATE 13
+#define PIN_NUKE 13
+#define PIN_CALIBRATE 15
 
 bool armFlag = false;
 
@@ -181,7 +181,7 @@ void setup()
     // supply your own gyro offsets here, scaled for min sensitivity
     mpu.setXGyroOffset(220);
     mpu.setYGyroOffset(76);
-    mpu.setZGyroOffset(-84);
+    mpu.setZGyroOffset(-83.9);
     mpu.setZAccelOffset(820); // 1688 factory default for my test chip
 
     // make sure it worked (returns 0 if so)

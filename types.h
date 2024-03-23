@@ -6,7 +6,7 @@
 #define AXIS_COUNT 3
 #define SBUS_CHANNEL_COUNT 16
 #define DEFAULT_CHANNEL_VALUE 1500
-#define THROTTLE_BUTTON_STEP 25
+#define THROTTLE_BUTTON_STEP 20
 
 #include <Arduino.h>
 
